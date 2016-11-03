@@ -1,8 +1,12 @@
-# v0.9.1 to-be-released
+# v0.10.0 to-be-released
 
 ## Fixed
 
 * `Hash#strict_with_defaults` properly evaluates callable defaults (bolshakov)
+
+## Changed
+
+* `Sum#call` no longer raises constraint errors (solnic)
 
 [Compare v0.9.0...HEAD](https://github.com/dryrb/dry-types/compare/v0.9.0...HEAD)
 
