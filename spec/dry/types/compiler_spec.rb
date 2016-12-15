@@ -208,11 +208,11 @@ RSpec.describe Dry::Types::Compiler, '#call' do
     expect(hash['oops']).to eql('oops')
 
     expect(hash['foo' => 'bar', 'email' => 'jane@doe.org', 'age' => '20', 'admin' => '1']).to eql(
-      email: 'jane@doe.org', age: 20, admin: true
+      email: 'jane@doe.org', age: 20, admin: true, __ignored_data: {foo: nil}
     )
 
     expect(hash['foo' => 'bar', 'age' => '20', 'admin' => '1']).to eql(
-      age: 20, admin: true
+      age: 20, admin: true, __ignored_data: {foo: nil}
     )
   end
 

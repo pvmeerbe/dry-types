@@ -13,6 +13,8 @@ module Dry
         # @return [Hash{Symbol => Definition}]
         attr_reader :member_types
 
+        IGNORED_DATA_KEY = :__ignored_data
+
         # @param [Class] _primitive
         # @param [Hash] options
         # @option options [Hash{Symbol => Definition}] :member_types
@@ -38,12 +40,24 @@ module Dry
           output  = {}
 
           begin
-            result = try_coerce(hash) do |key, member_result|
+            result, ignored_data = try_coerce(hash) do |key, member_result|
               success &&= member_result.success?
               output[key] = member_result.input
 
+              ignored_member_data = gather_ignored_data(output[key])
+              if ignored_member_data.present?
+                output[IGNORED_DATA_KEY] ||= {}
+                output[IGNORED_DATA_KEY][key] = ignored_member_data
+              end
+
               member_result
             end
+
+            if ignored_data && ! ignored_data.empty?
+              output[IGNORED_DATA_KEY] ||= {}
+              output[IGNORED_DATA_KEY] = ignored_data.merge(output[IGNORED_DATA_KEY])
+            end
+
           rescue ConstraintError, UnknownKeysError, SchemaError => e
             success = false
             result = e
@@ -59,6 +73,24 @@ module Dry
 
         private
 
+        def gather_ignored_data(output)
+          if output.class.to_s == 'Hash' && output.has_key?(IGNORED_DATA_KEY)  # TODO somehow output.is_a?(Hash) always seems to return false ...
+            output.delete(IGNORED_DATA_KEY)
+          elsif output.class.to_s == 'Array' # TODO somehow output.is_a?(Array) always seems to return false ...
+            output.inject([]) do |ignored_array_data, element|
+              ignored_data = gather_ignored_data(element)
+              ignored_array_data << ignored_data if ignored_data.present?
+            end
+          end
+        end
+
+        def resolve_ignored_values(hash)
+          (hash.keys - member_types.keys).inject({}) do |ignored_data,k|
+            ignored_data[k] = hash[k]
+            ignored_data
+          end
+        end
+
         # @param [Hash] hash
         # @return [Hash{Symbol => Object}]
         def try_coerce(hash)
@@ -70,19 +102,23 @@ module Dry
         # @param [Hash] hash
         # @return [Hash{Symbol => Object}]
         def coerce(hash)
-          resolve(hash) do |type, key, value|
+          result, ignored_values = resolve(hash) do |type, key, value|
             begin
               type.call(value)
             rescue ConstraintError
               raise SchemaError.new(key, value)
             end
           end
+          result
         end
 
         # @param [Hash] hash
         # @return [Hash{Symbol => Object}]
         def resolve(hash)
           result = {}
+
+          ignored_values = resolve_ignored_values(hash)
+
           member_types.each do |key, type|
             if hash.key?(key)
               result[key] = yield(type, key, hash[key])
@@ -90,7 +126,7 @@ module Dry
               resolve_missing_value(result, key, type)
             end
           end
-          result
+          [result,ignored_values]
         end
 
         # @param [Hash] result
@@ -136,14 +172,16 @@ module Dry
         # @raise [UnknownKeysError]
         #   if there any unexpected key in given hash
         def resolve(hash)
-          unexpected = hash.keys - member_types.keys
-          raise UnknownKeysError.new(*unexpected) unless unexpected.empty?
-
           super do |member_type, key, value|
             type = member_type.default? ? member_type.type : member_type
 
             yield(type, key, value)
           end
+        end
+
+        def resolve_ignored_values(hash)
+          unexpected = hash.keys - member_types.keys
+          raise UnknownKeysError.new(*unexpected) unless unexpected.empty?
         end
       end
 
@@ -203,8 +241,15 @@ module Dry
       class Symbolized < Weak
         private
 
+
         def resolve(hash)
           result = {}
+
+          ignored_values = (hash.keys.map(&:to_sym) - member_types.keys).inject({}) do |ignored_data,k|
+            ignored_data[k] = hash[k]
+            ignored_data
+          end
+
           member_types.each do |key, type|
             keyname =
               if hash.key?(key)
@@ -219,7 +264,7 @@ module Dry
               resolve_missing_value(result, key, type)
             end
           end
-          result
+          [result,ignored_values]
         end
       end
 
