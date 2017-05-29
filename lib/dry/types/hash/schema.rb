@@ -80,6 +80,7 @@ module Dry
             output.inject([]) do |ignored_array_data, element|
               ignored_data = gather_ignored_data(element)
               ignored_array_data << ignored_data if ignored_data.present?
+              ignored_array_data
             end
           end
         end
